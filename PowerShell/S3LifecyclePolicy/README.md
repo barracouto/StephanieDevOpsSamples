@@ -18,7 +18,7 @@ Before running the script, ensure that you have the AWS Tools for PowerShell mod
 Install-Module -Name AWSPowerShell -Force -AllowClobber
 ```
 ## <a name="usage">Usage</a>
-<b>Import the AWS module:</b>
+<b>Import the AWS module:</b><br>
 <small>In modern PowerShell (version 3.0 and later), modules are automatically imported when you use a cmdlet from the module. Therefore, in some cases, you may not need to explicitly use Import-Module if you're running a command that is part of the module. However, for clarity and to explicitly specify dependencies, it's recommended to include the Import-Module command at the beginning of your script or session.</small><br>
 <b>Import-Module AWSPowerShell</b> 
 <b>Set your AWS credentials:</b>
