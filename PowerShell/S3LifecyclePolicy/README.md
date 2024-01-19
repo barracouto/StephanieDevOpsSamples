@@ -64,5 +64,5 @@ Replace your-s3-bucket with the name of your S3 bucket.
 Set-S3BucketLifecycleConfiguration -BucketName $bucketName -Configuration $configuration
 ```
 
-##<a name="important-note">Important Note</a>
+## <a name="important-note">Important Note</a>
 Ensure that you replace placeholder values with your actual AWS credentials, S3 bucket information, and customize the lifecycle configuration based on your requirements. The script may impact your AWS environment, so use it with caution. Review and adapt the settings to match your organization's retention policies and storage needs.
