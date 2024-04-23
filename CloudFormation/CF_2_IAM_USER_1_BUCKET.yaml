@@ -1,0 +1,87 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Resources:
+  Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: sbcmentortask5
+
+  MentorTaskReadUser:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: MentorTaskRead
+
+  MentorTaskWriteUser:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: MentorTaskWrite
+
+  MentorTaskReadOnlyGroup:
+    Type: AWS::IAM::Group
+    Properties:
+      GroupName: MentorTaskReadOnly
+
+  MentorTaskWriteOnlyGroup:
+    Type: AWS::IAM::Group
+    Properties:
+      GroupName: MentorTaskWriteOnly
+
+  ReadPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: ReadPolicy
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - s3:GetObject
+            Resource: !Sub 'arn:aws:s3:::${Bucket}/*'
+      Groups:
+        - !Ref MentorTaskReadOnlyGroup
+
+  WritePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: WritePolicy
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - s3:PutObject
+              - s3:DeleteObject
+            Resource: !Sub 'arn:aws:s3:::${Bucket}/*'
+      Groups:
+        - !Ref MentorTaskWriteOnlyGroup
+
+  ListAllBucketsPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: ListAllBucketsPolicy
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - s3:ListAllMyBuckets
+              - s3:ListBucket
+            Resource:
+              - "*"
+              - !Sub 'arn:aws:s3:::${Bucket}'
+      Groups:
+        - !Ref MentorTaskReadOnlyGroup
+        - !Ref MentorTaskWriteOnlyGroup
+
+  AttachReadUser:
+    Type: AWS::IAM::UserToGroupAddition
+    Properties:
+      GroupName: !Ref MentorTaskReadOnlyGroup
+      Users:
+        - !Ref MentorTaskReadUser
+
+  AttachWriteUser:
+    Type: AWS::IAM::UserToGroupAddition
+    Properties:
+      GroupName: !Ref MentorTaskWriteOnlyGroup
+      Users:
+        - !Ref MentorTaskWriteUser
