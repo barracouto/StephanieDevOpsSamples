@@ -64,13 +64,16 @@ Resources:
           - Effect: Allow
             Action:
               - s3:ListAllMyBuckets
-              - s3:ListBucket
             Resource:
               - "*"
-              - !Sub 'arn:aws:s3:::${Bucket}'
+          - Effect: Allow
+            Action:
+              - s3:ListBucket
+            Resource:
+              - !Sub 'arn:aws:s3:::${Bucket}'    
       Groups:
         - !Ref MentorTaskReadOnlyGroup
-        - !Ref MentorTaskWriteOnlyGroup
+        - !Ref MentorTaskWriteOnlyGroup  
 
   AttachReadUser:
     Type: AWS::IAM::UserToGroupAddition
