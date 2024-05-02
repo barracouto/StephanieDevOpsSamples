@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: CloudFormation stack for creating Image Builder pipeline for golden image.
+Description: CloudFormation stack for creating an Amazon Image Builder pipeline for golden images.
 
 Parameters:
   PipelineName:
@@ -28,15 +28,15 @@ Parameters:
     Description: "Description of the recipe."
   BaseImageName:
     Type: String
-    Default: "arn:aws:imagebuilder:us-east-1:aws:image/windows-server-2022-english-core-base-x86/x.x.x"
+    Default: "arn:aws:imagebuilder:us-east-1:aws:image/ubuntu-server-20-lts-x86/x.x.x"
     Description: "Name of the base image for the recipe."
   WorkingDirectory:
     Type: String
-    Default: "C:/"
+    Default: "/tmp"
     Description: "Working directory for the pipeline."
   DeviceName:
     Type: String
-    Default: "xvda" 
+    Default: "/dev/sda1" 
     Description: "Name for the EBS Volume. "
   VolumeType:
     Type: String
@@ -50,21 +50,14 @@ Parameters:
     Description: "Whether encryption should be enabled for the EBS volume."
   VolumeSize:
     Type: String
-    Default: "30"
+    Default: "8"
     Description: "Size of the EBS volume in GB."
   InstanceType:
     Type: String
     Default: "t2.micro"
     AllowedValues: ["t2.micro", "t3.micro", "t3a.micro"]
     Description: "EC2 instance type to be used for the image pipeline."
-  KeyPair:
-    Type: String
-    Default: "GoldenImageKP"
-    Description: "EC2 Key Pair name for the instance."
-  SecurityGroup:
-    Type: String
-    Default: "sg-036010b7085d1ef20"
-    Description: Security Group ID. Default is set to Default Security Group. 
+
 
 Resources:
   ImageRecipe:
@@ -75,9 +68,8 @@ Resources:
       Description: !Ref RecipeDescription
       ParentImage: !Ref BaseImageName
       Components:
-        - ComponentArn: "arn:aws:imagebuilder:us-east-1:aws:component/amazon-cloudwatch-agent-windows/x.x.x"
-        - ComponentArn: "arn:aws:imagebuilder:us-east-1:aws:component/chocolatey/x.x.x"
-        - ComponentArn: "arn:aws:imagebuilder:us-east-1:aws:component/putty/x.x.x"
+        - ComponentArn: "arn:aws:imagebuilder:us-east-1:aws:component/apache-tomcat-9-linux/1.0.1/1"
+        - ComponentArn: "arn:aws:imagebuilder:us-east-1:aws:component/update-linux/1.0.2/1"
       BlockDeviceMappings:
         - DeviceName: !Ref DeviceName
           Ebs:
@@ -86,6 +78,15 @@ Resources:
             DeleteOnTermination: true
             VolumeSize: !Ref VolumeSize
 
+  InfrastructureConfiguration:
+    Type: AWS::ImageBuilder::InfrastructureConfiguration
+    Properties:
+      Name: !Sub "${AWS::StackName}-Infrastructure"
+      InstanceTypes:
+        - !Ref InstanceType
+      TerminateInstanceOnFailure: true
+      InstanceProfileName: "EC2InstanceProfileForImageBuilder"
+
   ImagePipeline:
     Type: AWS::ImageBuilder::ImagePipeline
     Properties:
@@ -93,67 +94,3 @@ Resources:
       Description: !Ref PipelineDescription
       ImageRecipeArn: !Ref ImageRecipe
       InfrastructureConfigurationArn: !Ref InfrastructureConfiguration
-
-  GIInstanceRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: ec2.amazonaws.com
-            Action: "sts:AssumeRole"
-      Policies:
-        - PolicyName: MyInstancePolicy
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action: "ec2:*"
-                Resource: "*"
-              - Effect: Allow
-                Action:
-                  - "ssm:SendCommand"
-                  - "ssm:ListCommands"
-                  - "ssm:GetCommandInvocation"
-                Resource: "*"  
-
-  InstanceProfile:
-    Type: AWS::IAM::InstanceProfile
-    Properties:
-      Roles:
-        - !Ref GIInstanceRole
-
-  InfrastructureConfiguration:
-    Type: AWS::ImageBuilder::InfrastructureConfiguration
-    Properties:
-      Name: !Sub "${AWS::StackName}-Infrastructure"
-      InstanceTypes:
-        - !Ref InstanceType
-      KeyPair: !Ref KeyPair
-      TerminateInstanceOnFailure: true
-      InstanceProfileName: !Ref InstanceProfile
-      SecurityGroupIds:
-       - !Ref SecurityGroup
-
-
-Outputs:
-  ImageRecipeArn:
-    Description: "ARN of the Image Recipe created"
-    Value: !GetAtt ImageRecipe.Arn
-    Export:
-      Name: !Sub "${AWS::StackName}-ImageRecipeArn"
-
-  ImagePipelineArn:
-    Description: "ARN of the Image Pipeline"
-    Value: !Ref ImagePipeline
-    Export:
-      Name: !Sub "${AWS::StackName}-ImagePipelineArn"
-
-  InfrastructureConfigurationArn:
-    Description: "ARN of the Infrastructure Configuration"
-    Value: !Ref InfrastructureConfiguration
-    Export:
-      Name: !Sub "${AWS::StackName}-InfrastructureConfigurationArn"
-
