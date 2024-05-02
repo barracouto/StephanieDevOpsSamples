@@ -1,65 +1,79 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: CloudFormation stack for creating an Amazon Image Builder pipeline for golden images.
 
+# Parameters used to customize the CloudFormation stack on creation
 Parameters:
   PipelineName:
     Type: String
     Default: "Golden Image"
-    Description: "Name of the image pipeline."
+    Description: "Name of the image pipeline. Used to identify the pipeline in the AWS Console."
+
   PipelineDescription:
     Type: String
     Default: "Mentor task to create golden image that can be used across multiple regions"
-    Description: "Description of the image pipeline."
+    Description: "Provides a detailed description of the pipeline's purpose and usage."
+
   BuildSchedule:
     Type: String
     Default: "Manual"
-    Description: "Build schedule for the pipeline."
+    Description: "Determines how the pipeline's image building process is triggered. 'Manual' requires user initiation."
+
   RecipeName:
     Type: String
     Default: "GoldenImage recipe"
-    Description: "Name of the recipe."
+    Description: "Name of the image recipe. Recipes define the configuration of the image to be created."
+
   RecipeVersion:
     Type: String
     Default: "1.0.0"
-    Description: "Version of the recipe."
+    Description: "Semantic versioning of the recipe, used to manage iterations of image configurations."
+
   RecipeDescription:
     Type: String
     Default: "Golden Image recipe for mentor task"
-    Description: "Description of the recipe."
+    Description: "Description of what the image recipe is designed to do or what it contains."
+
   BaseImageName:
     Type: String
     Default: "arn:aws:imagebuilder:us-east-1:aws:image/ubuntu-server-20-lts-x86/x.x.x"
-    Description: "Name of the base image for the recipe."
+    Description: "ARN of the base OS image used for creating the custom image."
+
   WorkingDirectory:
     Type: String
     Default: "/tmp"
-    Description: "Working directory for the pipeline."
+    Description: "Default directory on the instance where files are stored during the image creation process."
+
   DeviceName:
     Type: String
-    Default: "/dev/sda1" 
-    Description: "Name for the EBS Volume. "
+    Default: "/dev/sda1"
+    Description: "Identifier for the device on the instance, typically representing a disk volume or partition."
+
   VolumeType:
     Type: String
     Default: "gp2"
     AllowedValues: ["gp2", "gp3", "io1", "io2", "st1", "sc1"]
-    Description: "Type of the EBS volume."
+    Description: "Type of the EBS volume attached to the instance, affecting performance and cost."
+
   EncryptionEnabled:
     Type: String
     Default: "false"
     AllowedValues: ["true", "false"]
-    Description: "Whether encryption should be enabled for the EBS volume."
+    Description: "Determines if the data on the EBS volume should be encrypted."
+
   VolumeSize:
     Type: String
     Default: "8"
-    Description: "Size of the EBS volume in GB."
+    Description: "Size of the EBS volume in gigabytes, providing storage for the instance."
+
   InstanceType:
     Type: String
     Default: "t2.micro"
     AllowedValues: ["t2.micro", "t3.micro", "t3a.micro"]
-    Description: "EC2 instance type to be used for the image pipeline."
+    Description: "The type of EC2 instance used for the image building process, affects compute capacity and cost."
 
-
+# Resources created and managed by this CloudFormation template
 Resources:
+  # Defines the recipe for the image to be built, including base image, components, and storage
   ImageRecipe:
     Type: AWS::ImageBuilder::ImageRecipe
     Properties:
@@ -74,10 +88,11 @@ Resources:
         - DeviceName: !Ref DeviceName
           Ebs:
             VolumeType: !Ref VolumeType
-            Encrypted: !Ref EncryptionEnabled 
+            Encrypted: !Ref EncryptionEnabled
             DeleteOnTermination: true
             VolumeSize: !Ref VolumeSize
 
+  # Configuration defining the infrastructure for building the image
   InfrastructureConfiguration:
     Type: AWS::ImageBuilder::InfrastructureConfiguration
     Properties:
@@ -87,6 +102,7 @@ Resources:
       TerminateInstanceOnFailure: true
       InstanceProfileName: "EC2InstanceProfileForImageBuilder"
 
+  # Pipeline that automates the creation, management, and deployment of the new image
   ImagePipeline:
     Type: AWS::ImageBuilder::ImagePipeline
     Properties:
