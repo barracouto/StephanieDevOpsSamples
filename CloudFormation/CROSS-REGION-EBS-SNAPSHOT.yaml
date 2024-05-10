@@ -1,0 +1,133 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Template to create an EC2 instance and an EBS volume with customizable attributes. The template also creates a snapshot role to be used for snapshot management and a lifecycle policy for lifecycle management of EBS snapshots.
+
+Parameters:
+  InstanceName:
+    Type: String
+    Default: "Mentor-Task-Test"
+    Description: Name of the EC2 instance
+
+  InstanceType:
+    Type: String
+    Default: "t2.micro"
+    Description: EC2 instance type
+
+  ImageId:
+    Type: String
+    Default: "ami-0f496107db66676ff"
+    Description: AMI ID for the instance
+
+  KeyName:
+    Type: String
+    Default: "sandbox-kp-rsa-pem"
+    Description: EC2 Key Pair name
+
+  VolumeSize:
+    Type: Number
+    Default: "8"
+    Description: Size of the EBS volume in GiB
+
+  VolumeType:
+    Type: String
+    Default: "gp2"
+    Description: Type of the EBS volume (e.g., gp2, io1, etc.)
+
+  DeviceName:
+    Type: String
+    Default: "/dev/sdf"
+    Description: Device name for the EBS volume attachment
+
+  
+
+Resources:
+  MyInstance:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !Ref ImageId
+      KeyName: !Ref KeyName
+      BlockDeviceMappings:
+        - DeviceName: !Ref DeviceName
+          Ebs:
+            VolumeSize: !Ref VolumeSize
+            VolumeType: !Ref VolumeType
+      Tags:
+        - Key: "Name"
+          Value: !Ref InstanceName
+  SnapshotRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Principal:
+              Service: 'dlm.amazonaws.com'
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: 'SnapshotManagement'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: 'Allow'
+                Action:
+                  - 'ec2:CreateSnapshot'
+                  - 'ec2:CreateSnapshots'
+                  - 'ec2:DeleteSnapshot'
+                  - 'ec2:DescribeInstances'
+                  - 'ec2:DescribeVolumes'
+                  - 'ec2:DescribeSnapshots'
+                  - 'ec2:EnableFastSnapshotRestores'
+                  - 'ec2:DescribeFastSnapshotRestores'
+                  - 'ec2:DisableFastSnapshotRestores'
+                  - 'ec2:CopySnapshot'
+                  - 'ec2:ModifySnapshotAttribute'
+                  - 'ec2:DescribeSnapshotAttribute'
+                  - 'ec2:DescribeSnapshotTierStatus'
+                  - 'ec2:ModifySnapshotTier'
+                Resource: '*'
+              - Effect: 'Allow'
+                Action:
+                  - 'ec2:CreateTags'
+                Resource: 'arn:aws:ec2:*::snapshot/*'
+              - Effect: 'Allow'
+                Action:
+                  - 'ec2:CreateTags'
+                  - 'events:PutRule'
+                  - 'events:DeleteRule'
+                  - 'events:DescribeRule'
+                  - 'events:EnableRule'
+                  - 'events:DisableRule'
+                  - 'events:ListTargetsByRule'
+                  - 'events:PutTargets'
+                  - 'events:RemoveTargets'
+                Resource: 'arn:aws:events:*:*:rule/AwsDataLifecycleRule.managed-cwe.*'        
+  SnapshotLifecyclePolicy:
+    Type: 'AWS::DLM::LifecyclePolicy'
+    Properties:
+      Description: 'Hourly snapshot and cross-region copy policy'
+      ExecutionRoleArn: !GetAtt SnapshotRole.Arn
+      State: 'ENABLED'
+      PolicyDetails:
+        PolicyType: 'EBS_SNAPSHOT_MANAGEMENT'
+        ResourceTypes:
+          - 'INSTANCE'
+        TargetTags:
+          - Key: "Name"
+            Value: !Ref InstanceName
+        Schedules:
+          - Name: 'HourlySnapshots'
+            CopyTags: false
+            CreateRule:
+              Interval: 1
+              IntervalUnit: 'HOURS'
+            RetainRule:
+              Count: 48  
+            CrossRegionCopyRules:
+              - TargetRegion: 'us-east-2'
+                Encrypted: true
+                CopyTags: false
+                RetainRule:
+                  Interval: 2
+                  IntervalUnit: 'DAYS' 
+                   
