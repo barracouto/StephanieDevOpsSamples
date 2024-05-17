@@ -31,8 +31,19 @@ Parameters:
     Description: Certificate to use with the HTTPS listener
     Type: String
 
+  PrivateSubnet1Cidr:
+    Type: String
+    Description: The CIDR block for the first private subnet.
+    Default: 172.31.168.0/24
+
+  PrivateSubnet2Cidr:
+    Type: String
+    Description: The CIDR block for the second private subnet.
+    Default: 172.31.215.0/24
+
 
 Resources:
+## CREATING SECURITY GROUP USED IN EC2 AND LOADBALANCER
   SecurityGroup:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
@@ -47,7 +58,115 @@ Resources:
           FromPort: 443
           ToPort: 443
           CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0  
 
+## CREATING PRIVATE SUBNET
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateSubnet1Cidr
+      MapPublicIpOnLaunch: false
+      AvailabilityZone: us-east-1a
+      Tags:
+        - Key: Name
+          Value: PrivateSubnet1
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateSubnet2Cidr
+      MapPublicIpOnLaunch: false
+      AvailabilityZone: us-east-1b
+      Tags:
+        - Key: Name
+          Value: PrivateSubnet2
+
+## CREATING NAT GATEWAYS
+  NatGatewayEIP1:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  NatGatewayEIP2:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  NatGateway1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGatewayEIP1.AllocationId
+      SubnetId: !Ref PrivateSubnet1
+      Tags:
+        - Key: Name
+          Value: PrivateNatGateway1
+    DependsOn:
+      - PrivateSubnet1
+
+  NatGateway2:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGatewayEIP2.AllocationId
+      SubnetId: !Ref PrivateSubnet2
+      Tags:
+        - Key: Name
+          Value: PrivateNatGateway2
+    DependsOn:
+      - PrivateSubnet2    
+
+## CREATING ROUTE TABLES
+  PrivateRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: PrivateRouteTable1
+
+  PrivateRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: PrivateRouteTable2
+
+## CREATING ROUTE TABLE ASSOCIATIONS
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable1
+
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable2
+
+## CREATING ROUTES FOR THE NAT GATEWAY TO ROUTE TABLES
+  PrivateRoute1:
+    Type: AWS::EC2::Route
+    DependsOn: NatGateway1
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable1
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway1
+
+  PrivateRoute2:
+    Type: AWS::EC2::Route
+    DependsOn: NatGateway2
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway2
+
+## CREATING INSTANCES
   EC2Instance1:
     Type: 'AWS::EC2::Instance'
     Properties:
@@ -56,14 +175,14 @@ Resources:
       ImageId: !Ref AMI
       SecurityGroupIds:
         - !Ref SecurityGroup
-      SubnetId: !Ref Subnet1  
+      SubnetId: !Ref PrivateSubnet1  
       UserData: !Base64 |
         #!/bin/bash
         yum update -y
         yum install httpd -y
         service httpd start
         cd /var/www/html
-        echo "<html><body><h1>Hello!!</h1></body></html>" > index.html 
+        echo "<html><body><h1>Hello!!</h1></body></html>" > index.html
 
   EC2Instance2:
     Type: 'AWS::EC2::Instance'
@@ -73,15 +192,16 @@ Resources:
       ImageId: !Ref AMI
       SecurityGroupIds:
         - !Ref SecurityGroup
-      SubnetId: !Ref Subnet2  
+      SubnetId: !Ref PrivateSubnet2  
       UserData: !Base64 |
         #!/bin/bash
         yum update -y
         yum install httpd -y
         service httpd start
         cd /var/www/html
-        echo "<html><body><h1>Hello from the other side!</h1></body></html>" > index.html   
+        echo "<html><body><h1>Hello from the other side!</h1></body></html>" > index.html
 
+## CREATING LOADBALANCERS, TWO TARGET GROUPS, AND TWO LISTENERS
   LoadBalancer:
     Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
     Properties:
@@ -92,9 +212,8 @@ Resources:
       SecurityGroups:
         - !Ref SecurityGroup
       Scheme: internet-facing
-    DependsOn:
-      - SecurityGroup
-
+    DependsOn: 
+        - SecurityGroup  
 
   TargetGroup1:
     Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
