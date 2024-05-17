@@ -85,7 +85,7 @@ Resources:
   LoadBalancer:
     Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
     Properties:
-      Name: MyLoadBalancer
+      Name: MentorTaskLoadBalancer
       Subnets: 
         - !Ref Subnet1
         - !Ref Subnet2
