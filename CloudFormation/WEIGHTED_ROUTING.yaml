@@ -1,6 +1,8 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: CloudFormation template to deploy two EC2 instances with user data, security groups, and load balancing with weighted distribution
-
+Description:  |
+  This CloudFormation template deploys two EC2 instances with user data, security groups, private subnets, 
+  route tables and their associations, a NAT gateway, and a load balancer configured for weighted distribution.
+  
 Parameters:
   AMI:
     Description: AMI ID
@@ -34,12 +36,10 @@ Parameters:
   PrivateSubnet1Cidr:
     Type: String
     Description: The CIDR block for the first private subnet.
-    Default: 172.31.168.0/24
 
   PrivateSubnet2Cidr:
     Type: String
     Description: The CIDR block for the second private subnet.
-    Default: 172.31.215.0/24
 
 
 Resources:
@@ -58,6 +58,10 @@ Resources:
           FromPort: 443
           ToPort: 443
           CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: 0.0.0.0/0  
 
 ## CREATING PRIVATE SUBNET
   PrivateSubnet1:
@@ -97,23 +101,20 @@ Resources:
     Type: AWS::EC2::NatGateway
     Properties:
       AllocationId: !GetAtt NatGatewayEIP1.AllocationId
-      SubnetId: !Ref PrivateSubnet1
+      SubnetId: !Ref Subnet1
       Tags:
         - Key: Name
           Value: PrivateNatGateway1
-    DependsOn:
-      - PrivateSubnet1
+
 
   NatGateway2:
     Type: AWS::EC2::NatGateway
     Properties:
       AllocationId: !GetAtt NatGatewayEIP2.AllocationId
-      SubnetId: !Ref PrivateSubnet2
+      SubnetId: !Ref Subnet2
       Tags:
         - Key: Name
-          Value: PrivateNatGateway2
-    DependsOn:
-      - PrivateSubnet2    
+          Value: PrivateNatGateway2  
 
 ## CREATING ROUTE TABLES
   PrivateRouteTable1:
@@ -162,6 +163,29 @@ Resources:
       DestinationCidrBlock: 0.0.0.0/0
       NatGatewayId: !Ref NatGateway2
 
+## IAM ROLE FOR EC2 TO ACCESS SSM
+  EC2SSMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+
+## INSTANCE PROFILE TO BE ASSOCIATED WITH EC2 INSTANCES
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref EC2SSMRole
+      Path: /
+
 ## CREATING INSTANCES
   EC2Instance1:
     Type: 'AWS::EC2::Instance'
@@ -169,6 +193,7 @@ Resources:
       InstanceType: !Ref InstanceType
       KeyName: !Ref KeyPairName
       ImageId: !Ref AMI
+      IamInstanceProfile: !Ref EC2InstanceProfile
       SecurityGroupIds:
         - !Ref SecurityGroup
       SubnetId: !Ref PrivateSubnet1  
@@ -186,6 +211,7 @@ Resources:
       InstanceType: !Ref InstanceType
       KeyName: !Ref KeyPairName
       ImageId: !Ref AMI
+      IamInstanceProfile: !Ref EC2InstanceProfile
       SecurityGroupIds:
         - !Ref SecurityGroup
       SubnetId: !Ref PrivateSubnet2  
