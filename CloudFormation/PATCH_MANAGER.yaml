@@ -9,13 +9,15 @@ Parameters:
   
   KeyPairName:
     Description: Name of an existing EC2 KeyPair to enable SSH access
-    Type: String
-    Default: sandbox-kp-rsa-pem  
+    Type: String 
   
-  AMI:
-    Description: AMI ID for the EC2 instances
+  LinuxAMI:
+    Description: Linux AMI ID for the EC2 instances
     Type: String
-    Default: ami-0bb84b8ffd87024d8
+
+  WindowsAMI:
+    Description: Windows AMI ID for the EC2 instances
+    Type: String
 
   Region:
     Description: Region in which the Amazon S3 bucket to write instance-level logs to is in
@@ -30,7 +32,7 @@ Resources:
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
-          - Effect: Allow0
+          - Effect: Allow
             Principal:
               Service: ec2.amazonaws.com
             Action: sts:AssumeRole
@@ -60,33 +62,39 @@ Resources:
     Properties:
       InstanceType: !Ref InstanceType
       KeyName: !Ref KeyPairName
-      ImageId: !Ref AMI
+      ImageId: !Ref LinuxAMI
       IamInstanceProfile: !Ref EC2InstanceProfile
       Tags:
         - Key: Name
           Value: EC2Instance1
+        - Key: OS
+          Value: Linux  
 
   EC2Instance2:
     Type: AWS::EC2::Instance
     Properties:
       InstanceType: !Ref InstanceType
       KeyName: !Ref KeyPairName
-      ImageId: !Ref AMI
+      ImageId: !Ref LinuxAMI
       IamInstanceProfile: !Ref EC2InstanceProfile
       Tags:
         - Key: Name
           Value: EC2Instance2
+        - Key: OS
+          Value: Linux
 
   EC2Instance3:
     Type: AWS::EC2::Instance
     Properties:
       InstanceType: !Ref InstanceType
       KeyName: !Ref KeyPairName
-      ImageId: !Ref AMI
+      ImageId: !Ref WindowsAMI
       IamInstanceProfile: !Ref EC2InstanceProfile
       Tags:
         - Key: Name
           Value: EC2Instance3
+        - Key: OS
+          Value: Windows  
 
 ## PATCH MANAGER CONFIGURATION
 ## CREATE MAINTENANCE WINDOW
@@ -117,7 +125,6 @@ Resources:
             - !Ref EC2Instance3
       WindowId: !Ref MaintenanceWindow
       OwnerInformation: MentorTaskPatchPolicy
-      DependsOn: MaintenanceWindow
 
 ## CREATE S3 BUCKET FOR PATCHING LOG OUTPUT
   S3Bucket:
@@ -135,6 +142,11 @@ Resources:
       TaskArn: AWS-PatchInstance
       TaskType: RUN_COMMAND
       WindowId: !Ref MaintenanceWindow
+      TaskInvocationParameters:
+        MaintenanceWindowRunCommandParameters:
+          Parameters:
+            Operation:
+              - Install
       LoggingInfo:
         S3Bucket: !Ref S3Bucket
         Region: !Ref Region
@@ -144,4 +156,45 @@ Resources:
             - !Ref EC2Instance1
             - !Ref EC2Instance2
             - !Ref EC2Instance3
-      DependsOn: MaintenanceWindow      
+
+## CUSTOM PATCH BASELINES
+  LinuxPatchBaseline:
+    Type: AWS::SSM::PatchBaseline
+    Properties:
+      Name: "LinuxPatchBaseline"
+      OperatingSystem: AMAZON_LINUX_2
+      ApprovalRules:
+        PatchRules:
+          - ApproveAfterDays: 1
+            ComplianceLevel: CRITICAL
+            PatchFilterGroup:
+              PatchFilters:
+                - Key: PRODUCT
+                  Values:
+                    - AmazonLinux2
+      PatchGroups:
+        - Linux
+      Tags:
+        - Key: Name
+          Value: LinuxPatchBaseline
+
+  WindowsPatchBaseline:
+    Type: AWS::SSM::PatchBaseline
+    Properties:
+      Name: "WindowsPatchBaseline"
+      OperatingSystem: WINDOWS
+      ApprovalRules:
+        PatchRules:
+          - ApproveAfterDays: 1
+            ComplianceLevel: CRITICAL
+            PatchFilterGroup:
+              PatchFilters:
+                - Key: PRODUCT
+                  Values:
+                    - WindowsServer2022
+      PatchGroups:
+        - Windows
+      Tags:
+        - Key: Name
+          Value: WindowsPatchBaseline
+
