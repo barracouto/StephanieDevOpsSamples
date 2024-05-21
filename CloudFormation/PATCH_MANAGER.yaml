@@ -22,7 +22,7 @@ Parameters:
   Region:
     Description: Region in which the Amazon S3 bucket to write instance-level logs to is in
     Type: String
-    Default: us-east-1  
+    Default: us-east-1
 
 Resources:
 ## IAM ROLE FOR EC2 TO ACCESS SSM
@@ -67,8 +67,10 @@ Resources:
       Tags:
         - Key: Name
           Value: EC2Instance1
-        - Key: Patch Group
-          Value: Linux 
+        - Key: PatchGroups
+          Value: Linux
+        - Key: OS
+          Value: Linux  
 
   EC2Instance2:
     Type: AWS::EC2::Instance
@@ -80,8 +82,11 @@ Resources:
       Tags:
         - Key: Name
           Value: EC2Instance2
-        - Key: Patch Group
+        - Key: PatchGroups
           Value: Linux
+        - Key: OS
+          Value: Linux  
+  
 
   EC2Instance3:
     Type: AWS::EC2::Instance
@@ -93,8 +98,11 @@ Resources:
       Tags:
         - Key: Name
           Value: EC2Instance3
-        - Key: Patch Group
+        - Key: PatchGroups
+          Value: Windows
+        - Key: OS
           Value: Windows  
+  
 
 ## PATCH MANAGER CONFIGURATION
 ## CREATE MAINTENANCE WINDOW FOR LINUX INSTANCES
@@ -153,7 +161,7 @@ Resources:
     Properties:
       BucketName: !Sub "patch-logs-${AWS::AccountId}-${AWS::Region}"
 
-## DEFINE TASK FOR LINUX MAINTENANCE WINDOW        
+## DEFINE TASK FOR LINUX MAINTENANCE WINDOW
   LinuxMaintenanceWindowTask:
     Type: AWS::SSM::MaintenanceWindowTask
     Properties:
@@ -177,6 +185,29 @@ Resources:
             - !Ref EC2Instance1
             - !Ref EC2Instance2
 
+## DEFINE TASK FOR WINDOWS MAINTENANCE WINDOW
+  WindowsMaintenanceWindowTask:
+    Type: AWS::SSM::MaintenanceWindowTask
+    Properties:
+      MaxConcurrency: '10'
+      MaxErrors: '2'
+      Priority: 1
+      TaskArn: AWS-PatchInstance
+      TaskType: RUN_COMMAND
+      WindowId: !Ref WindowsMaintenanceWindow
+      TaskInvocationParameters:
+        MaintenanceWindowRunCommandParameters:
+          Parameters:
+            Operation:
+              - Install
+      LoggingInfo:
+        S3Bucket: !Ref S3Bucket
+        Region: !Ref Region
+      Targets:
+        - Key: InstanceIds
+          Values:
+            - !Ref EC2Instance3
+
 ## LINUX PATCH BASELINES
   LinuxPatchBaseline:
     Type: AWS::SSM::PatchBaseline
@@ -191,11 +222,11 @@ Resources:
               PatchFilters:
                 - Values:
                     - Security
-                  Key: CLASSIFICATION  
+                  Key: CLASSIFICATION
                 - Values:
                     - Critical
                     - Important
-                  Key: SEVERITY  
+                  Key: SEVERITY
       PatchGroups:
         - Linux
       Tags:
@@ -226,4 +257,3 @@ Resources:
       Tags:
         - Key: Name
           Value: WindowsPatchBaseline
-
