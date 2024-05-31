@@ -7,12 +7,10 @@ Description: |
 Parameters:
   AMI:
     Type: "String"
-    Default: ami-0500330e7a591bebc
     Description: "AMI ID for version 1 of the web application"
 
   KeyPairName:
     Type: "String"
-    Default: sandbox-kp-rsa-pem
     Description: "Name of an existing EC2 KeyPair to enable SSH access to the instances"
 
   InstanceType:
@@ -23,27 +21,22 @@ Parameters:
   VPC:
     Description: VPC ID
     Type: String
-    Default: vpc-02d536537f4769883
 
   Subnet1:
     Description: Subnet ID for the first subnet
     Type: String
-    Default: subnet-0a859dcb442776a84
 
   Subnet2:
     Description: Subnet ID for the second subnet
     Type: String
-    Default: subnet-0d76032f2185a9905
 
   PrivateSubnet1Cidr:
     Type: String
     Description: The CIDR block for the first private subnet.
-    Default: 172.31.168.0/24
 
   PrivateSubnet2Cidr:
     Type: String
     Description: The CIDR block for the second private subnet.
-    Default: 172.31.215.0/24
 
 Resources:
   ## CREATING SECURITY GROUP USED IN EC2 AND LOAD BALANCER
