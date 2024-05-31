@@ -1,0 +1,91 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: |
+ CloudFormation stack for creating an Amazon Image Builder pipeline for WebApp images. 
+ This stack is the precursor to the highly available server stack.
+
+Parameters:
+  PipelineName:
+    Type: String
+    Default: "WebApp"
+    Description: "Name of the image pipeline."
+  PipelineDescription:
+    Type: String
+    Default: "Mentor task to WebApp image that can be used across multiple regions"
+    Description: "Description of the image pipeline."
+  BuildSchedule:
+    Type: String
+    Default: "Manual"
+    Description: "Build schedule for the pipeline."
+  RecipeName:
+    Type: String
+    Default: "WebApp recipe"
+    Description: "Name of the recipe."
+  RecipeVersion:
+    Type: String
+    Default: "1.0.0"
+    Description: "Version of the recipe."
+  RecipeDescription:
+    Type: String
+    Default: "WebApp recipe for mentor task"
+    Description: "Description of the recipe."
+  BaseImageName:
+    Type: String
+    Default: "arn:aws:imagebuilder:us-east-1:aws:image/amazon-linux-2-x86/x.x.x"
+    Description: "Name of the base image for the recipe."
+ 
+
+Resources:
+  ImageRecipe:
+    Type: AWS::ImageBuilder::ImageRecipe
+    Properties:
+      Name: !Ref RecipeName
+      Version: !Ref RecipeVersion
+      Description: !Ref RecipeDescription
+      ParentImage: !Ref BaseImageName
+      Components:
+        - ComponentArn: "arn:aws:imagebuilder:us-east-1:aws:component/apache-tomcat-9-linux/x.x.x"
+        - ComponentArn: "arn:aws:imagebuilder:us-east-1:aws:component/update-linux/x.x.x"
+        - ComponentArn: !GetAtt WebAppComponent.Arn
+
+          
+  WebAppComponent:
+    Type: AWS::ImageBuilder::Component
+    Properties:
+      Name: WebApp
+      Description: A component to install my web app
+      Platform: Linux
+      Version: 1.0.0
+      Data: |
+        name: WebApp
+        description: A component to install my web app
+        schemaVersion: 1.0
+        phases:
+          - name: build
+            steps:
+              - name: InstallPackages
+                action: ExecuteBash
+                inputs:
+                  commands:
+                    - |
+                      #!/bin/bash
+                      yum update -y
+                      yum install httpd -y
+                      sudo systemctl start httpd
+                      sudo systemctl enable httpd
+                      cd /var/www/html
+                      echo "<html><body><h1>Hello from webapp version 1</h1></body></html>" > index.html
+
+
+  InfrastructureConfiguration:
+    Type: AWS::ImageBuilder::InfrastructureConfiguration
+    Properties:
+      Name: !Sub "${AWS::StackName}-Infrastructure"
+      InstanceProfileName: "EC2InstanceProfileForImageBuilder"
+
+  ImagePipeline:
+    Type: AWS::ImageBuilder::ImagePipeline
+    Properties:
+      Name: !Ref PipelineName
+      Description: !Ref PipelineDescription
+      ImageRecipeArn: !Ref ImageRecipe
+      InfrastructureConfigurationArn: !Ref InfrastructureConfiguration
