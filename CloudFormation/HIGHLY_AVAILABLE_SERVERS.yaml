@@ -1,40 +1,49 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: |
   This launch template will deploy a highly available web server. It includes two launch configurations, an auto scaling group,
-  and a load balancer.
+  and a load balancer. Prior to running this CloudFormation template you should run the ImageBuilder stack and then run the
+  pipeline to create the AMI. 
 
 Parameters:
   AMI:
     Type: "String"
+    Default: ami-0500330e7a591bebc
     Description: "AMI ID for version 1 of the web application"
 
   KeyPairName:
     Type: "String"
+    Default: sandbox-kp-rsa-pem
     Description: "Name of an existing EC2 KeyPair to enable SSH access to the instances"
 
   InstanceType:
     Description: EC2 Instance Type
     Type: String
+    Default: t2.micro  
 
   VPC:
     Description: VPC ID
     Type: String
+    Default: vpc-02d536537f4769883
 
   Subnet1:
     Description: Subnet ID for the first subnet
     Type: String
+    Default: subnet-0a859dcb442776a84
 
   Subnet2:
     Description: Subnet ID for the second subnet
     Type: String
+    Default: subnet-0d76032f2185a9905
 
   PrivateSubnet1Cidr:
     Type: String
     Description: The CIDR block for the first private subnet.
+    Default: 172.31.168.0/24
 
   PrivateSubnet2Cidr:
     Type: String
     Description: The CIDR block for the second private subnet.
+    Default: 172.31.215.0/24
 
 Resources:
   ## CREATING SECURITY GROUP USED IN EC2 AND LOAD BALANCER
@@ -197,7 +206,7 @@ Resources:
       Port: 80
       Protocol: HTTP
 
-## CREATING FIRST VERSION LAUNCH TEMPLATE
+## LAUNCH TEMPLATE THAT CALLS IN AMI CREATED BY IMAGE BUILDER IN FIRST STEP
   LaunchTemplate:
     Type: "AWS::EC2::LaunchTemplate"
     Properties:
@@ -208,16 +217,8 @@ Resources:
         KeyName: !Ref KeyPairName
         SecurityGroupIds:
           - !Ref SecurityGroup
-        UserData:
-          Fn::Base64: !Sub |
-            #!/bin/bash
-            yum update -y
-            yum install httpd -y
-            service httpd start
-            cd /var/www/html
-            echo "<html><body><h1>Hello from webapp version 1</h1></body></html>" > index.html
 
-## CREATING AUTO SCALING GROUP
+## AUTOSCALING GROUP
   AutoScalingGroup:
     Type: "AWS::AutoScaling::AutoScalingGroup"
     Properties:
@@ -237,7 +238,7 @@ Resources:
           Value: "WebApp"
           PropagateAtLaunch: true
 
-## SCALE UP TO 7 INSTANCES AT 12:00 p.m. EST
+## SCHEDULED SCALE UP AND SCALE DOWN
   ScaleUpAtNoon:
     Type: "AWS::AutoScaling::ScheduledAction"
     Properties:
@@ -245,12 +246,9 @@ Resources:
       Recurrence: "0 17 * * MON-FRI" # 12 p.m. EST
       DesiredCapacity: 7
 
-## SCALE BACK DOWN TO 2 INSTANCES AT 1:00 p.m. EST
   ScaleDownAfterNoon:
     Type: "AWS::AutoScaling::ScheduledAction"
     Properties:
       AutoScalingGroupName: !Ref AutoScalingGroup
       Recurrence: "0 18 * * MON-FRI" # 1 p.m. EST
       DesiredCapacity: 2
-
-
