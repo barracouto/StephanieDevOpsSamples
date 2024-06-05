@@ -1,0 +1,382 @@
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: |
+  This launch template will deploy two fault tolerant web servers behind a load balancer and auto scaling group. The template 
+  will also implement a daily snapshot policy with a cross region replication policy.
+
+Parameters:
+  AMI:
+    Type: "String"
+    Default: ami-00beae93a2d981137
+    Description: "AMI ID for the web application"
+
+  KeyPairName:
+    Type: "String"
+    Default: sandbox-kp-rsa-pem
+    Description: "Name of an existing EC2 KeyPair to enable SSH access to the instances"
+
+  InstanceType:
+    Description: EC2 Instance Type
+    Type: String
+    Default: t2.micro  
+
+  VPC:
+    Description: VPC ID
+    Type: String
+    Default: vpc-02d536537f4769883
+
+  Subnet1:
+    Description: Subnet ID for the first subnet
+    Type: String
+    Default: subnet-0a859dcb442776a84
+
+  Subnet2:
+    Description: Subnet ID for the second subnet
+    Type: String
+    Default: subnet-0d76032f2185a9905
+
+  PrivateSubnet1Cidr:
+    Type: String
+    Description: The CIDR block for the first private subnet.
+    Default: 172.31.168.0/24
+
+  PrivateSubnet2Cidr:
+    Type: String
+    Description: The CIDR block for the second private subnet.
+    Default: 172.31.215.0/24
+
+Resources:
+  ## CREATING SECURITY GROUP USED IN EC2 AND LOAD BALANCER
+  SecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Enable HTTP and HTTPS access
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: 0.0.0.0/0  
+
+  ## CREATING PRIVATE SUBNET
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateSubnet1Cidr
+      MapPublicIpOnLaunch: false
+      AvailabilityZone: us-east-1a
+      Tags:
+        - Key: Name
+          Value: PrivateSubnet1
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateSubnet2Cidr
+      MapPublicIpOnLaunch: false
+      AvailabilityZone: us-east-1b
+      Tags:
+        - Key: Name
+          Value: PrivateSubnet2
+
+  ## CREATING NAT GATEWAYS
+  NatGatewayEIP1:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  NatGatewayEIP2:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  NatGateway1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGatewayEIP1.AllocationId
+      SubnetId: !Ref Subnet1
+      Tags:
+        - Key: Name
+          Value: PrivateNatGateway1
+
+  NatGateway2:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGatewayEIP2.AllocationId
+      SubnetId: !Ref Subnet2
+      Tags:
+        - Key: Name
+          Value: PrivateNatGateway2  
+
+  ## CREATING ROUTE TABLES
+  PrivateRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: PrivateRouteTable1
+
+  PrivateRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: PrivateRouteTable2
+
+  ## CREATING ROUTE TABLE ASSOCIATIONS
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable1
+
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable2
+
+  ## CREATING ROUTES FOR THE NAT GATEWAY TO ROUTE TABLES
+  PrivateRoute1:
+    Type: AWS::EC2::Route
+    DependsOn: NatGateway1
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable1
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway1
+
+  PrivateRoute2:
+    Type: AWS::EC2::Route
+    DependsOn: NatGateway2
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway2
+  
+  ## CREATING LOAD BALANCER
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: "FaultTolerantLoadBalancer"
+      Subnets:
+        - !Ref Subnet1
+        - !Ref Subnet2
+      SecurityGroups:
+        - !Ref SecurityGroup
+      Scheme: internet-facing
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: '60'
+
+  ## CREATING TARGET GROUP FOR LOAD BALANCER
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: "FaultTolerantTargetGroup"
+      Port: 80
+      Protocol: HTTP
+      VpcId: !Ref VPC
+      HealthCheckProtocol: HTTP
+      HealthCheckPort: "80"
+      HealthCheckPath: "/"
+      Matcher:
+        HttpCode: "200"
+      TargetType: instance
+
+## CREATING LOAD BALANCER LISTENER
+  LoadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 80
+      Protocol: HTTP    
+
+## IAM ROLE FOR EC2 TO ACCESS SSM
+  EC2SSMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM
+        
+## INSTANCE PROFILE TO BE ASSOCIATED WITH EC2 INSTANCES
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref EC2SSMRole
+      Path: /
+
+## LAUNCH TEMPLATE TO BE USED BY AUTO SCALING GROUP
+  LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: FaultTolerantWebServerTemplate
+      LaunchTemplateData:
+        InstanceType: !Ref InstanceType
+        KeyName: !Ref KeyPairName
+        ImageId: !Ref AMI
+        IamInstanceProfile:
+          Name: !Ref EC2InstanceProfile
+        SecurityGroupIds:
+          - !Ref SecurityGroup
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: FTWS
+              - Key: FaultTolerant
+                Value: True
+          - ResourceType: volume
+            Tags:
+              - Key: FaultTolerant
+                Value: True
+        UserData: !Base64 |
+          #!/bin/bash
+          yum update -y
+          yum install httpd -y
+          sudo systemctl start httpd
+          sudo systemctl enable httpd
+          cd /var/www/html
+          echo "<html><body><h1>Fault Tolerant Web Server</h1></body></html>" > index.html
+
+## AUTOSCALING GROUP
+  AutoScalingGroup:
+    Type: "AWS::AutoScaling::AutoScalingGroup"
+    Properties:
+      VPCZoneIdentifier:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      LaunchTemplate:
+          LaunchTemplateId: !Ref LaunchTemplate
+          Version: !GetAtt LaunchTemplate.LatestVersionNumber
+      MinSize: "2"
+      MaxSize: "10"
+      DesiredCapacity: "2"
+      TargetGroupARNs:
+        - !Ref TargetGroup
+      Tags:
+        - Key: Name
+          Value: "FTWS"
+          PropagateAtLaunch: true          
+      MetricsCollection:
+        - Granularity: "1Minute"
+
+## SCALING POLICY
+  TargetTrackingScalingPolicy:
+    Type: "AWS::AutoScaling::ScalingPolicy"
+    Properties:
+      AutoScalingGroupName: !Ref AutoScalingGroup
+      PolicyType: "TargetTrackingScaling"
+      TargetTrackingConfiguration:
+        TargetValue: 50.0
+        PredefinedMetricSpecification:
+          PredefinedMetricType: "ASGAverageCPUUtilization"
+
+
+## CREATING SNAPSHOT ROLE TO BE USED IN SNAPSHOT POLICY
+  SnapshotRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Principal:
+              Service: 'dlm.amazonaws.com'
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: 'SnapshotManagement'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: 'Allow'
+                Action:
+                  - 'ec2:CreateSnapshot'
+                  - 'ec2:CreateSnapshots'
+                  - 'ec2:DeleteSnapshot'
+                  - 'ec2:DescribeInstances'
+                  - 'ec2:DescribeVolumes'
+                  - 'ec2:DescribeSnapshots'
+                  - 'ec2:EnableFastSnapshotRestores'
+                  - 'ec2:DescribeFastSnapshotRestores'
+                  - 'ec2:DisableFastSnapshotRestores'
+                  - 'ec2:CopySnapshot'
+                  - 'ec2:ModifySnapshotAttribute'
+                  - 'ec2:DescribeSnapshotAttribute'
+                  - 'ec2:DescribeSnapshotTierStatus'
+                  - 'ec2:ModifySnapshotTier'
+                Resource: '*'
+              - Effect: 'Allow'
+                Action:
+                  - 'ec2:CreateTags'
+                Resource: 'arn:aws:ec2:*::snapshot/*'
+              - Effect: 'Allow'
+                Action:
+                  - 'ec2:CreateTags'
+                  - 'events:PutRule'
+                  - 'events:DeleteRule'
+                  - 'events:DescribeRule'
+                  - 'events:EnableRule'
+                  - 'events:DisableRule'
+                  - 'events:ListTargetsByRule'
+                  - 'events:PutTargets'
+                  - 'events:RemoveTargets'
+                Resource: 'arn:aws:events:*:*:rule/AwsDataLifecycleRule.managed-cwe.*'  
+
+## CREATING DAILY SNAPSHOT POLICY WITH CROSS REGION REPLICATION
+  SnapshotLifecyclePolicy:
+    Type: 'AWS::DLM::LifecyclePolicy'
+    Properties:
+      Description: 'Daily snapshot and cross-region copy policy'
+      ExecutionRoleArn: !GetAtt SnapshotRole.Arn
+      State: 'ENABLED'
+      PolicyDetails:
+        PolicyType: 'EBS_SNAPSHOT_MANAGEMENT'
+        ResourceTypes:
+          - 'INSTANCE'
+        TargetTags:
+          - Key: "FaultTolerant"
+            Value: "True"
+          - Key: "Name"
+            Value: "FTWS"  
+        Schedules:
+          - Name: 'DailySnapshots'
+            CopyTags: false
+            CreateRule:
+              Interval: 24
+              IntervalUnit: 'HOURS'
+              Times:
+                - '22:00' # UTC - 6:00 p.m. EST / 5:00 p.m. CST
+            RetainRule:
+              Count: 5
+            CrossRegionCopyRules:
+              - TargetRegion: 'us-east-2'
+                Encrypted: true
+                CopyTags: false
+                RetainRule:
+                  Interval: 2
+                  IntervalUnit: 'DAYS'
