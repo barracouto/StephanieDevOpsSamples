@@ -14,7 +14,7 @@ def lambda_handler(event, context):
         message += f"Resources: {', '.join([resource['Id'] for resource in finding['Resources']])}\n\n"
 
     sns_client.publish(
-        TopicArn='arn:aws:sns:us-east-1:637423298209:MT-SecurityHubAlerts',
+        TopicArn='replace with your topic ARN',
         Message=message,
         Subject='Security Hub Alert'
     )
