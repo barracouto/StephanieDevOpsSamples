@@ -3,7 +3,6 @@ import boto3
 def lambda_handler(event, context):
     ec2 = boto3.client('ec2')
     
-    # Describe all running instances
     response = ec2.describe_instances(
         Filters=[
             {'Name': 'instance-state-name', 'Values': ['running']}
