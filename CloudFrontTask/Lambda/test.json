@@ -1,0 +1,32 @@
+// To test different regions change the value in the CloudFront-Viewer-Country header with the variable set in the Lambda Function. Do not include this comment in the test. 
+
+{
+    "Records": [
+      {
+        "cf": {
+          "request": {
+            "headers": {
+              "cloudfront-viewer-country": [
+                {
+                  "key": "CloudFront-Viewer-Country",
+                  "value": "DE"
+                }
+              ],
+              "host": [
+                {
+                  "key": "Host",
+                  "value": "mt-cloudfront-us-east-1.s3.amazonaws.com"
+                }
+              ]
+            },
+            "origin": {
+              "s3": {
+                "region": "us-east-1",
+                "domainName": "mt-cloudfront-us-east-1.s3.amazonaws.com"
+              }
+            }
+          }
+        }
+      }
+    ]
+  }
