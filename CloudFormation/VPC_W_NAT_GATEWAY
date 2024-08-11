@@ -46,7 +46,6 @@ Parameters:
 
   KeyName:
     Type: String
-    Default: "sandbox-kp-rsa-pem"
     Description: EC2 Key Pair name
 
   InstanceName:
