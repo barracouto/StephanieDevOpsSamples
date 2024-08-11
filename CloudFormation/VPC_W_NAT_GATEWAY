@@ -1,0 +1,272 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: |
+  This CloudFormation template will deploy a VPC with associated public and private route
+  tables, and create two public and two private subnets. It will attach an Internet
+  Gateway to the VPC and a NAT Gateway to a public subnet. The NAT Gateway attaches 
+  to the route table associated with the private subnets, granting internet access to
+  instances in those subnets. Finally, the template will deploy an Application Load Balancer (ALB)
+  in the public subnets to allow external access to an EC2 instance within one of the private subnets,
+  ensuring that the application is routed through the private subnet for a more secure deployment.
+
+Parameters:
+  vpcCidrBlock:
+    Type: String
+    Description: The CIDR block for the VPC
+    Default: 10.90.0.0/16
+
+  publicSubnetCidrBlock:
+    Type: String
+    Description: The CIDR block for the first public subnet
+    Default: 10.90.0.0/24
+
+  publicSubnet2CidrBlock:
+    Type: String
+    Description: The CIDR block for the second public subnet
+    Default: 10.90.1.0/24
+
+  privateSubnetCidrBlock:
+    Type: String
+    Description: The CIDR block for the first private subnet
+    Default: 10.90.2.0/24
+
+  privateSubnet2CidrBlock:
+    Type: String
+    Description: The CIDR block for the second private subnet
+    Default: 10.90.3.0/24
+
+  InstanceType:
+    Type: String
+    Default: "t2.micro"
+    Description: EC2 instance type
+
+  ImageId:
+    Type: String
+    Default: "ami-0427090fd1714168b"
+    Description: AMI ID for the instance
+
+  KeyName:
+    Type: String
+    Default: "sandbox-kp-rsa-pem"
+    Description: EC2 Key Pair name
+
+  InstanceName:
+    Type: String
+    Default: "Mentor-Task-Test"
+    Description: Name of the EC2 instance   
+
+Resources:
+  myVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref vpcCidrBlock
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      Tags:
+        - Key: Name
+          Value: MyVPC
+
+  myPublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref myVPC
+      Tags:
+        - Key: Name
+          Value: PublicRouteTable
+
+  myInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: InternetGateway
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref myVPC
+      InternetGatewayId: !Ref myInternetGateway
+
+  myPrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref myVPC
+      Tags:
+        - Key: Name
+          Value: PrivateRouteTable
+
+  NATGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NATGatewayEIP.AllocationId
+      SubnetId: !Ref myPublicSubnet
+      Tags:
+        - Key: Name
+          Value: NATGateway
+
+  NATGatewayEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+        
+  RouteNATGatewayPrivate:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref myPrivateRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId: !Ref NATGateway    
+
+  RouteIGWPublic:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref myPublicRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: !Ref myInternetGateway
+
+  myPublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref myVPC
+      CidrBlock: !Ref publicSubnetCidrBlock
+      AvailabilityZone: "us-east-1c"
+      Tags:
+        - Key: Name
+          Value: PublicSubnet1
+  
+  myPublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref myVPC
+      CidrBlock: !Ref publicSubnet2CidrBlock
+      AvailabilityZone: "us-east-1d"
+      Tags:
+        - Key: Name
+          Value: PublicSubnet2
+
+  myPrivateSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref myVPC
+      CidrBlock: !Ref privateSubnetCidrBlock
+      AvailabilityZone: "us-east-1c"
+      Tags:
+        - Key: Name
+          Value: PrivateSubnet1
+  
+  myPrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref myVPC
+      CidrBlock: !Ref privateSubnet2CidrBlock
+      AvailabilityZone: "us-east-1d"
+      Tags:
+        - Key: Name
+          Value: PrivateSubnet2
+
+  myPublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref myPublicSubnet
+      RouteTableId: !Ref myPublicRouteTable
+
+  myPublicSubnetRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref myPublicSubnet2
+      RouteTableId: !Ref myPublicRouteTable    
+
+  myPrivateSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref myPrivateSubnet
+      RouteTableId: !Ref myPrivateRouteTable
+
+  myPrivateSubnetRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref myPrivateSubnet2
+      RouteTableId: !Ref myPrivateRouteTable
+
+  MyInstance:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !Ref ImageId
+      KeyName: !Ref KeyName
+      SecurityGroupIds:
+        - !Ref SecurityGroup
+      SubnetId: 
+        !Ref myPrivateSubnet  
+      Tags:
+        - Key: Name
+          Value: !Ref InstanceName
+      UserData: !Base64 |
+          #!/bin/bash
+          yum update -y
+          yum install httpd -y
+          sudo systemctl start httpd
+          sudo systemctl enable httpd
+          cd /var/www/html
+          echo "<html><body><h1>Your NGW is working!</h1></body></html>" > index.html            
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow access to web servers
+      VpcId: !Ref myVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 0.0.0.0/0          
+      Tags:
+        - Key: Name
+          Value: WebServerSG
+
+  ALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: myALB
+      Subnets:
+        - !Ref myPublicSubnet
+        - !Ref myPublicSubnet2
+      SecurityGroups:
+        - !Ref SecurityGroup
+      Scheme: internet-facing
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: '60'
+      Tags:
+        - Key: Name
+          Value: MyApplicationLoadBalancer
+
+  ALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ALB
+      Protocol: HTTP
+      Port: 80
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref ALBTargetGroup
+
+  ALBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: myTargetGroup
+      VpcId: !Ref myVPC
+      Protocol: HTTP
+      Port: 80
+      HealthCheckProtocol: HTTP
+      HealthCheckPort: 80
+      HealthCheckPath: /
+      TargetType: instance
+      Targets:
+        - Id: !Ref MyInstance
+      Tags:
+        - Key: Name
+          Value: MyALBTargetGroup
